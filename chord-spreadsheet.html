@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scale / Chord Finder</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      text-align: center;
+      padding: 20px;
+    }
+    .options { margin: 10px; }
+    
+    #chordStructureDisplay {
+      margin: 20px auto;
+      min-height: 250px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    #chordStructureDisplay img {
+      max-width: 600px;
+      height: auto;
+      transition: opacity 0.3s ease;
+    }
+    
+    table { 
+      border-collapse: separate; 
+      border-spacing: 0;
+      margin: 20px auto; 
+      font-family: 'Times New Roman', serif;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      font-size: 20px;
+    }
+    th, td { 
+      border: 1px solid #666; 
+      padding: 16px 24px;
+      text-align: center;
+    }
+    th { background: linear-gradient(to bottom, #f8f8f8, #d0d0d0); }
+    .root { background: linear-gradient(to bottom, #e6ffe6, #66cc66); }
+    .third, .fifth { background: linear-gradient(to bottom, #ffff99, #ffeb3b); }
+    .seventh { background: linear-gradient(to bottom, #ffcc99, #ff9933); }
+    .disabled { 
+      background: linear-gradient(to bottom, #f0f0f0, #b0b0b0); 
+      color: #666; 
+    }
+    
+    .chord-cell {
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    
+    .chord-cell:hover {
+      background: linear-gradient(to bottom, #cceeff, #66b3ff) !important;
+      font-weight: bold;
+    }
+    
+    table tr:first-child th:first-child { border-top-left-radius: 12px; }
+    table tr:first-child th:last-child { border-top-right-radius: 12px; }
+    table tr:last-child th:first-child { border-bottom-left-radius: 12px; }
+    table tr:last-child td:last-child { border-bottom-right-radius: 12px; }
+
+    select {
+      width: 100px;
+      height: 45px;
+      font-size: 22px;
+      padding: 6px;
+    }
+    #chordType {
+      width: 160px;
+      height: 45px;
+      font-size: 22px;
+      padding: 6px;
+    }
+    
+    input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+    
+    .options label {
+      font-size: 18px;
+      cursor: pointer;
+      margin: 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Dropdowns for Key, Accidental, Mode -->
+  <div class="options">
+    <label>
+      <select id="letter">
+        <option>C</option>
+        <option>D</option>
+        <option>E</option>
+        <option>F</option>
+        <option>G</option>
+        <option>A</option>
+        <option>B</option>
+      </select>
+    </label>
+
+    <label>
+      <select id="accidental">
+        <option value="">♮</option>
+        <option value="#">♯</option>
+        <option value="b">♭</option>
+      </select>
+    </label>
+
+    <label>
+      <select id="mode">
+        <option value="major">Major</option>
+        <option value="minor">Minor</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- Minor-only options -->
+  <div class="options">
+    <label><input type="checkbox" id="raise6"> Raise 6 (#6)</label>
+    <label><input type="checkbox" id="raise7"> Raise 7 (#7)</label>
+  </div>
+
+  <!-- Scale Table -->
+  <table id="scaleTable">
+    <tbody>
+      <tr><th class="seventh">7th</th></tr>
+      <tr><th class="fifth">5th</th></tr>
+      <tr><th class="third">3rd</th></tr>
+      <tr><th class="root">Root</th></tr>
+      <tr><th>Chord</th></tr>
+    </tbody>
+  </table>
+
+  <!-- Chord Type Selector -->
+  <div class="options">
+    <label for="chordType">Chord Type: </label>
+    <select id="chordType">
+      <option value="triad">Triad</option>
+      <option value="7th">7th Chord</option>
+    </select>
+  </div>
+
+  <!-- Chord Structure Display -->
+  <div id="chordStructureDisplay"></div>
+
+  <script>
+    const majorScales = {
+      "C":["C","D","E","F","G","A","B"], 
+      "C#":["C#","D#","E#","F#","G#","A#","B#"], 
+      "Db":["Db","Eb","F","Gb","Ab","Bb","C"],
+      "D":["D","E","F#","G","A","B","C#"], 
+      "Eb":["Eb","F","G","Ab","Bb","C","D"], 
+      "E":["E","F#","G#","A","B","C#","D#"],
+      "F":["F","G","A","Bb","C","D","E"], 
+      "F#":["F#","G#","A#","B","C#","D#","E#"], 
+      "Gb":["Gb","Ab","Bb","Cb","Db","Eb","F"],
+      "G":["G","A","B","C","D","E","F#"], 
+      "Ab":["Ab","Bb","C","Db","Eb","F","G"], 
+      "A":["A","B","C#","D","E","F#","G#"],
+      "Bb":["Bb","C","D","Eb","F","G","A"], 
+      "B":["B","C#","D#","E","F#","G#","A#"]
+    };
+
+    const naturalMinor = {
+      "A":["A","B","C","D","E","F","G"], 
+      "Bb":["Bb","C","Db","Eb","F","Gb","Ab"], 
+      "B":["B","C#","D","E","F#","G","A"],
+      "C":["C","D","Eb","F","G","Ab","Bb"], 
+      "C#":["C#","D#","E","F#","G#","A","B"], 
+      "D":["D","E","F","G","A","Bb","C"],
+      "Eb":["Eb","F","Gb","Ab","Bb","Cb","Db"], 
+      "D#":["D#","E#","F#","G#","A#","B","C#"], 
+      "E":["E","F#","G","A","B","C","D"],
+      "F":["F","G","Ab","Bb","C","Db","Eb"], 
+      "F#":["F#","G#","A","B","C#","D","E"], 
+      "G":["G","A","Bb","C","D","Eb","F"],
+      "G#":["G#","A#","B","C#","D#","E","F#"], 
+      "Ab":["Ab","Bb","Cb","Db","Eb","Fb","Gb"]
+    };
+
+    const romanNumerals = {
+      major: {
+        triad:["I","ii","iii","IV","V","vi","vii°"],
+        seventh:["I7","ii7","iii7","IV7","V7","vi7","viiø7"]
+      },
+      natural: {
+        triad:["i","ii°","III","iv","v","VI","VII"],
+        seventh:["i7","iiø7","III7","iv7","v7","VI7","VII7"]
+      },
+      harmonic: {
+        triad:["i","ii°","III+","iv","V","VI","vii°"],
+        seventh:["i7","iiø7","III7#5","iv7","V7","VI7","vii°7"]
+      },
+      raise6: {
+        triad:["i","ii","III","IV","v","vi°","VII"],
+        seventh:["i7","ii7","III7","IV7","v7","viø7","VII7"]
+      },
+      melodic: {
+        triad:["i","ii","III+","IV","V","vi°","vii°"],
+        seventh:["i7","ii7","III7#5","IV7","V7","viø7","viiø7"]
+      }
+    };
+
+    // Mapping from chord symbols to image sections
+    const chordImageMap = {
+      // Triads
+      "I": "major_triad",
+      "IV": "major_triad",
+      "V": "major_triad",
+      "ii": "minor_triad",
+      "iii": "minor_triad",
+      "vi": "minor_triad",
+      "i": "minor_triad",
+      "iv": "minor_triad",
+      "v": "minor_triad",
+      "III": "major_triad",
+      "VI": "major_triad",
+      "VII": "major_triad",
+      "III+": "augmented_triad",
+      "vii°": "diminished_triad",
+      "ii°": "diminished_triad",
+      "vi°": "diminished_triad",
+      // 7th chords
+      "V7": "dominant_7th",
+      "I7": "major_7th",
+      "IV7": "major_7th",
+      "III7": "major_7th",
+      "VI7": "major_7th",
+      "VII7": "major_7th",
+      "ii7": "minor_7th",
+      "iii7": "minor_7th",
+      "vi7": "minor_7th",
+      "i7": "minor_7th",
+      "iv7": "minor_7th",
+      "v7": "minor_7th",
+      "viiø7": "half_diminished_7th",
+      "iiø7": "half_diminished_7th",
+      "viø7": "half_diminished_7th",
+      "vii°7": "diminished_7th",
+      "III7#5": "augmented_7th"
+    };
+
+    const rotate = (arr, n) => arr.slice(n).concat(arr.slice(0,n));
+    const raiseNote = note => ({
+      "A":"A#","Bb":"B","B":"B#","Cb":"C","C":"C#","Db":"D","D":"D#","Eb":"E","E":"E#",
+      "Fb":"F","F":"F#","Gb":"G","G":"G#","Ab":"A", "F#":"Fx",
+    }[note] || note);
+
+    const getScale = (key, mode, raise6, raise7) => {
+      if(mode === "major") return majorScales[key];
+      if(!naturalMinor[key]) return null;
+      let scale = [...naturalMinor[key]];
+      if(raise6) scale[5] = raiseNote(scale[5]);
+      if(raise7) scale[6] = raiseNote(scale[6]);
+      return scale;
+    };
+
+    const getRomanSet = (mode, raise6, raise7, chordType) => {
+      let quality = "major";
+      if(mode === "minor") {
+        if(raise6 && raise7) quality="melodic";
+        else if(raise7) quality="harmonic";
+        else if(raise6) quality="raise6";
+        else quality="natural";
+      }
+      return romanNumerals[quality][chordType];
+    };
+
+    const chordImages = {
+     "major_triad":        { local: "assets/images/major_triad.svg",        remote: "https://mattmusic.me/wp-content/uploads/2025/11/major_triad.png" },
+     "minor_triad":        { local: "assets/images/minor_triad.svg",         remote: "https://mattmusic.me/wp-content/uploads/2025/11/minor_triad.png" },
+     "augmented_triad":    { local: "assets/images/augmented_triad.svg",     remote: "https://mattmusic.me/wp-content/uploads/2025/11/augmented_triad.png" },
+     "diminished_triad":   { local: "assets/images/diminished_triad.svg",    remote: "https://mattmusic.me/wp-content/uploads/2025/11/diminished_triad.png" },
+     "dominant_7th":       { local: "assets/images/dominant_7th.svg",        remote: "https://mattmusic.me/wp-content/uploads/2025/11/dominant_7th.png" },
+     "major_7th":          { local: "assets/images/major_7th.svg",           remote: "https://mattmusic.me/wp-content/uploads/2025/11/major_7th.png" },
+     "minor_7th":          { local: "assets/images/minor_7th.svg",           remote: "https://mattmusic.me/wp-content/uploads/2025/11/minor_7th.png" },
+     "half_diminished_7th":{ local: "assets/images/half_diminished_7th.svg", remote: "https://mattmusic.me/wp-content/uploads/2025/11/half_diminished_7th.png" },
+     "diminished_7th":     { local: "assets/images/diminished_7th.svg",      remote: "https://mattmusic.me/wp-content/uploads/2025/11/diminished_7th.png" },
+     "augmented_7th":      { local: "assets/images/augmented_7th.svg",       remote: "https://mattmusic.me/wp-content/uploads/2025/11/augmented_7th.png" },
+    };
+
+    const showChordStructure = (chordSymbol) => {
+      const display = document.getElementById("chordStructureDisplay");
+      const imageType = chordImageMap[chordSymbol];
+      
+      if (imageType === null || imageType === undefined) {
+        display.innerHTML = '';
+        return;
+      }
+      
+      const imageUrl = chordImages[imageType];
+      
+      if (!imageUrl) {
+        display.innerHTML = '';
+        return;
+      }
+      
+      display.innerHTML = `
+        <div style="text-align: center;">
+          <img
+            src="${imageUrl.local}"
+            alt="${chordSymbol} structure"
+            onerror="this.src='${imageUrl.remote}';"
+            >
+        </div>
+      `;
+    };
+
+    const updateTable = () => {
+      const letter = document.getElementById("letter").value;
+      const accidental = document.getElementById("accidental").value;
+      const mode = document.getElementById("mode").value;
+      const raise6 = document.getElementById("raise6").checked;
+      const raise7 = document.getElementById("raise7").checked;
+      const chordType = document.getElementById("chordType").value === "triad" ? "triad" : "seventh";
+
+      const key = letter + accidental;
+      const scale = getScale(key, mode, raise6, raise7);
+      if(!scale) return;
+
+      const tbody = document.querySelector("#scaleTable tbody");
+      tbody.innerHTML = `
+        <tr class="seventh"><th>7th</th></tr>
+        <tr class="fifth"><th>5th</th></tr>
+        <tr class="third"><th>3rd</th></tr>
+        <tr class="root"><th>Root</th></tr>
+        <tr><th>Chord</th></tr>
+      `;
+
+      rotate(scale,6).forEach(n => tbody.rows[0].innerHTML += `<td>${n}</td>`); // 7th
+      rotate(scale,4).forEach(n => tbody.rows[1].innerHTML += `<td>${n}</td>`); // 5th
+      rotate(scale,2).forEach(n => tbody.rows[2].innerHTML += `<td>${n}</td>`); // 3rd
+      scale.forEach(n => tbody.rows[3].innerHTML += `<td>${n}</td>`);           // root
+
+      const romans = getRomanSet(mode, raise6, raise7, chordType);
+      romans.forEach(r => {
+        const cell = document.createElement('td');
+        cell.textContent = r;
+        cell.classList.add('chord-cell');
+        cell.addEventListener('mouseenter', () => showChordStructure(r));
+        cell.addEventListener('mouseleave', () => {
+          document.getElementById("chordStructureDisplay").innerHTML = '';
+        });
+        tbody.rows[4].appendChild(cell);
+      });
+
+      // Gray out 7th row if triad selected
+      if(chordType === "triad") {
+        tbody.rows[0].classList.add("disabled");
+      } else {
+        tbody.rows[0].classList.remove("disabled");
+      }
+    };
+
+    document.querySelectorAll("select, input").forEach(el => el.addEventListener("change", updateTable));
+    updateTable();
+  </script>
+</body>
+</html>
