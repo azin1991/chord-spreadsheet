@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scale / Chord Finder</title>
   <style>
     body { 
@@ -11,20 +12,51 @@
     }
     .options { margin: 10px; }
     
+    .layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 32px;
+    }
+
+    .workspace { min-width: 0; }
+
+    .table-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+      padding: 0 8px 8px;
+    }
+
+    /* Diagram panel sits beside the table and is capped to the viewport height */
     #chordStructureDisplay {
-      margin: 20px auto;
-      min-height: 250px;
+      position: sticky;
+      top: 20px;
+      box-sizing: border-box;
+      width: clamp(200px, 20vw, 260px);
+      min-height: 160px;
+      padding: 20px;
+      margin-top: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      background: #fff;
+      overflow: hidden;
     }
-    
+
     #chordStructureDisplay img {
-      max-width: 600px;
+      display: block;
+      width: 100%;
       height: auto;
-      transition: opacity 0.3s ease;
     }
-    
+
+    #chordStructureDisplay .placeholder {
+      color: #888;
+      font-size: 16px;
+      padding: 24px;
+    }
+
     table { 
       border-collapse: separate; 
       border-spacing: 0;
@@ -54,7 +86,8 @@
       transition: background 0.2s ease;
     }
     
-    .chord-cell:hover {
+    .chord-cell:hover,
+    .chord-cell.selected {
       background: linear-gradient(to bottom, #cceeff, #66b3ff) !important;
       font-weight: bold;
     }
@@ -88,9 +121,28 @@
       cursor: pointer;
       margin: 0 10px;
     }
+
+    @media (max-width: 1000px) {
+      .layout {
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+      }
+      body { padding: 16px; }
+      .workspace { width: 100%; }
+      select, #chordType { width: auto; font-size: 18px; }
+      table { font-size: 16px; }
+      th, td { padding: 10px 8px; }
+      #chordStructureDisplay {
+        position: static;
+        width: min(100%, 240px);
+      }
+    }
   </style>
 </head>
 <body>
+  <main class="layout">
+  <section class="workspace">
   <!-- Dropdowns for Key, Accidental, Mode -->
   <div class="options">
     <label>
@@ -128,6 +180,7 @@
   </div>
 
   <!-- Scale Table -->
+  <div class="table-wrap">
   <table id="scaleTable">
     <tbody>
       <tr><th class="seventh">7th</th></tr>
@@ -137,6 +190,7 @@
       <tr><th>Chord</th></tr>
     </tbody>
   </table>
+  </div>
 
   <!-- Chord Type Selector -->
   <div class="options">
@@ -147,8 +201,11 @@
     </select>
   </div>
 
+  </section>
+
   <!-- Chord Structure Display -->
-  <div id="chordStructureDisplay"></div>
+  <aside id="chordStructureDisplay"></aside>
+  </main>
 
   <script>
     const majorScales = {
@@ -247,6 +304,13 @@
       "III7#5": "augmented_7th"
     };
 
+    // Same symbol, different quality depending on the scale
+    const chordImageOverrides = {
+      natural: { "VII7": "dominant_7th" },
+      raise6:  { "IV7": "dominant_7th" },
+      melodic: { "IV7": "dominant_7th" }
+    };
+
     const rotate = (arr, n) => arr.slice(n).concat(arr.slice(0,n));
     const raiseNote = note => ({
       "A":"A#","Bb":"B","B":"B#","Cb":"C","C":"C#","Db":"D","D":"D#","Eb":"E","E":"E#",
@@ -262,15 +326,12 @@
       return scale;
     };
 
-    const getRomanSet = (mode, raise6, raise7, chordType) => {
-      let quality = "major";
-      if(mode === "minor") {
-        if(raise6 && raise7) quality="melodic";
-        else if(raise7) quality="harmonic";
-        else if(raise6) quality="raise6";
-        else quality="natural";
-      }
-      return romanNumerals[quality][chordType];
+    const getQuality = (mode, raise6, raise7) => {
+      if(mode !== "minor") return "major";
+      if(raise6 && raise7) return "melodic";
+      if(raise7) return "harmonic";
+      if(raise6) return "raise6";
+      return "natural";
     };
 
     const chordImages = {
@@ -286,31 +347,38 @@
      "augmented_7th":      { local: "assets/images/augmented_7th.svg",       remote: "https://mattmusic.me/wp-content/uploads/2025/11/augmented_7th.png" },
     };
 
+    const placeholderHTML = '<div class="placeholder">Hover or tap a chord to see its structure</div>';
+
+    // Index of the chord clicked/tapped; kept across key and chord-type changes
+    let selectedIndex = null;
+    let currentRomans = [];
+    let currentQuality = "major";
+
     const showChordStructure = (chordSymbol) => {
       const display = document.getElementById("chordStructureDisplay");
-      const imageType = chordImageMap[chordSymbol];
-      
-      if (imageType === null || imageType === undefined) {
-        display.innerHTML = '';
-        return;
-      }
-      
-      const imageUrl = chordImages[imageType];
-      
+      const overrides = chordImageOverrides[currentQuality] || {};
+      const imageUrl = chordImages[overrides[chordSymbol] || chordImageMap[chordSymbol]];
+
       if (!imageUrl) {
-        display.innerHTML = '';
+        display.innerHTML = placeholderHTML;
         return;
       }
-      
+
       display.innerHTML = `
-        <div style="text-align: center;">
-          <img
-            src="${imageUrl.local}"
-            alt="${chordSymbol} structure"
-            onerror="this.src='${imageUrl.remote}';"
-            >
-        </div>
+        <img
+          src="${imageUrl.local}"
+          alt="${chordSymbol} structure"
+          onerror="this.src='${imageUrl.remote}';"
+          >
       `;
+    };
+
+    const showSelectedOrPlaceholder = () => {
+      if (selectedIndex === null) {
+        document.getElementById("chordStructureDisplay").innerHTML = placeholderHTML;
+      } else {
+        showChordStructure(currentRomans[selectedIndex]);
+      }
     };
 
     const updateTable = () => {
@@ -339,17 +407,24 @@
       rotate(scale,2).forEach(n => tbody.rows[2].innerHTML += `<td>${n}</td>`); // 3rd
       scale.forEach(n => tbody.rows[3].innerHTML += `<td>${n}</td>`);           // root
 
-      const romans = getRomanSet(mode, raise6, raise7, chordType);
-      romans.forEach(r => {
+      currentQuality = getQuality(mode, raise6, raise7);
+      const romans = romanNumerals[currentQuality][chordType];
+      currentRomans = romans;
+      romans.forEach((r, i) => {
         const cell = document.createElement('td');
         cell.textContent = r;
         cell.classList.add('chord-cell');
+        if (i === selectedIndex) cell.classList.add('selected');
         cell.addEventListener('mouseenter', () => showChordStructure(r));
-        cell.addEventListener('mouseleave', () => {
-          document.getElementById("chordStructureDisplay").innerHTML = '';
+        cell.addEventListener('mouseleave', showSelectedOrPlaceholder);
+        cell.addEventListener('click', () => {
+          selectedIndex = selectedIndex === i ? null : i;
+          tbody.querySelectorAll('.chord-cell').forEach((c, j) => c.classList.toggle('selected', j === selectedIndex));
+          showSelectedOrPlaceholder();
         });
         tbody.rows[4].appendChild(cell);
       });
+      showSelectedOrPlaceholder();
 
       // Gray out 7th row if triad selected
       if(chordType === "triad") {
